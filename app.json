@@ -15,7 +15,11 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.czaded.expoapptest",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "isIosBackgroundLocationEnabled": true,
+        "UIBackgroundModes": [
+          "audio"
+        ]
       }
     },
     "android": {
@@ -28,7 +32,8 @@
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT"
       ],
-      "package": "com.czaded.expoapptest"
+      "package": "com.czaded.expoapptest",
+      "isAndroidBackgroundLocationEnabled": true
     },
     "web": {
       "favicon": "./assets/favicon.png"

@@ -1,7 +1,6 @@
 import { Dispatch, SetStateAction, useMemo, useState } from "react";
 import { PermissionsAndroid, Platform } from "react-native";
 import {
-  BleError,
   BleManager,
   Device,
 } from "react-native-ble-plx";
