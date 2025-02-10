@@ -1,15 +1,27 @@
-import React, { useState, useEffect } from "react";
-import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Image, Alert } from "react-native";
+import React, { useState, useEffect, useCallback } from "react";
+import { SafeAreaView, StyleSheet, Text, TouchableOpacity, View, Image, Alert, Keyboard } from "react-native";
 import useBLE from "./useBLE";
-import Slider from "@react-native-community/slider";
 import { LinearGradient } from 'expo-linear-gradient';
 import CheckBox from '@react-native-community/checkbox';
 import useAudioPlayer from './useAudioPlayer';
 import useLocation from "./useLocation";
+import { useKeepAwake } from 'expo-keep-awake';
+import HoldButton from "./HoldButton";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from "@react-navigation/native";
+
 
 const audioSource = require('./img/alert.mp3');
 
 const HomeScreen = () => {
+  useKeepAwake();
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
+
   const { playSound, stopSound } = useAudioPlayer(audioSource);
   let { location } = useLocation();
   const {
@@ -26,8 +38,56 @@ const HomeScreen = () => {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [startCountdown, setStartCountdown] = useState<boolean>(false);
   const [rssiTreshold, setRssiTrheshold] = useState<number>(-70);
+  const [emergencyNumber, setEmergencyNumber] = useState<string | null>(null);
   const [showMetaData, setShowMetaData] = useState<boolean>(false);
 
+
+  const sendSMS = async (emergencyNumber: string, location: any) => {
+    const url = 'http://tracking.digital-apps.de:3000/send-sms';
+    const message = `Notfall! Die Koordinaten sind: https://www.google.com/maps?q=${location.coords.latitude},${location.coords.longitude}`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          to: emergencyNumber,
+          message: message,
+        }),
+      });
+  
+      const result = await response.json();
+  
+      if (!response.ok) {
+        throw new Error('Fehler beim Senden der SMS');
+      }
+  
+      console.log('SMS gesendet:', result);
+    } catch (error) {
+      console.error('SMS konnte nicht gesendet werden:', error);
+      setTimeout(() => sendSMS(emergencyNumber, location), 60000); // Versuch in 60 Sekunden
+    }
+  };
+  
+
+  const loadData = async () => {
+    try {
+      const number = await AsyncStorage.getItem('emergencyNumber');
+      const threshold = await AsyncStorage.getItem('alarmThreshold');
+  
+      if (number) {
+        setEmergencyNumber(number);
+      }
+
+      if (threshold) {
+        setRssiTrheshold(Number(threshold));
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden:', error);
+    }
+  };
 
   useEffect(() => {
     if (rssi < rssiTreshold) {
@@ -41,7 +101,7 @@ const HomeScreen = () => {
 
   useEffect(() => {
     if (startCountdown) {
-      setCountdown(5);
+      setCountdown(10);
       const interval = setInterval(() => {
         setCountdown((prev) => {
           if (prev !== null && prev > 0) {
@@ -49,7 +109,12 @@ const HomeScreen = () => {
           } else {
             clearInterval(interval);
             setRssiAlert(true);
-            playSound();
+            // playSound();
+
+            if (emergencyNumber && location) {
+              sendSMS(emergencyNumber, location);
+            }
+
             console.log(location);
             return null;
           }
@@ -88,7 +153,14 @@ const HomeScreen = () => {
       style={styles.container}
     >
       <SafeAreaView style={{ flex: 1 }}>
-        <View style={styles.contentWrapper}>
+
+        {!emergencyNumber ? (<>
+          <View style={styles.contentWrapper}>
+            <Text style={styles.ctaButtonText}>Bitte Nummer einfügen</Text>
+          </View>
+        </>) : (<>
+        
+          <View style={styles.contentWrapper}>
           {connectedDevice ? (
             <>
               <Text style={styles.titleText}>Beacon verbunden!</Text>
@@ -102,51 +174,47 @@ const HomeScreen = () => {
                 <Text style={styles.rssiText}>RSSI: {rssi}</Text>
                 <View style={[styles.rssiBar, { width: `${100 + rssi}%`, backgroundColor: getBarColor() }]} />
 
-                <Text style={styles.sliderLabel}>Schwellenwert: {rssiTreshold}</Text>
-                <Slider
-                  style={styles.slider}
-                  minimumValue={-100}
-                  maximumValue={-30}
-                  step={1}
-                  value={rssiTreshold}
-                  onValueChange={setRssiTrheshold}
-                  minimumTrackTintColor="red"
-                  maximumTrackTintColor="gray"
-                />
-
                 {rssi < rssiTreshold && countdown !== null && (
                   <Text style={styles.countdownText}>Alarm in {countdown} Sekunden...</Text>
                 )}
+
+                {emergencyNumber && <Text style={styles.alertText}>Notfallnummer: {emergencyNumber}</Text>}
+                {rssiTreshold !== null && <Text style={styles.alertText}>RSSI-Schwellenwert: {rssiTreshold}</Text>}
+
+
+                {location && <Text style={styles.alertText}>Deine Koordinaten: {location.coords.latitude}-{location.coords.longitude}</Text>}
+
               </>) : (<></>)}
 
               {rssiAlert && <Text style={styles.alertText}>Ein Alarm wurde ausgelöst!</Text>}
-              {location && <Text style={styles.alertText}>Deine Koordinaten: {location.coords.latitude}-{location.coords.longitude}</Text>}
             </>
+            ) : (
+              <>
+                <Text style={styles.titleText}>Bitte verbinde einen Beacon!</Text>
+                <Image style={styles.unicornImage} source={require('./img/unicorn_scanning.png')} />
+                {deviceSearching ? <Text>Suche Beacon & Koordinaten...</Text> : null}
+              </>
+            )}
+          </View>
+
+          {connectedDevice ? (
+            <HoldButton onLongPress={resetApp} label="Abbrechen (Halten für 3 Sekunden)" />
           ) : (
-            <>
-              <Text style={styles.titleText}>Bitte verbinde einen Beacon!</Text>
-              <Image style={styles.unicornImage} source={require('./img/unicorn_scanning.png')} />
-              {deviceSearching ? <Text>Suche Beacon...</Text> : null}
-            </>
+            <TouchableOpacity onPress={handleScan} style={styles.ctaButton}>
+              <Text style={styles.ctaButtonText}>Beacon suchen</Text>
+            </TouchableOpacity>
           )}
-        </View>
 
-        <TouchableOpacity
-          onPress={connectedDevice ? resetApp : handleScan}
-          style={[styles.ctaButton]}
-        >
-          <Text style={styles.ctaButtonText}>
-            {connectedDevice ? "Abbrechen" : "Beacon suchen"}
-          </Text>
-        </TouchableOpacity>
+          <View style={styles.metaData}>
+            <Text>Zeige Metadaten?</Text>
+            <CheckBox
+              value={showMetaData}
+              onValueChange={(newValue: boolean) => setShowMetaData(newValue)}
+            />
+          </View>
+        </>)}
 
-        <View style={styles.metaData}>
-          <Text>Zeige Metadaten?</Text>
-          <CheckBox
-            value={showMetaData}
-            onValueChange={(newValue: boolean) => setShowMetaData(newValue)}
-          />
-        </View>
+
       </SafeAreaView>
     </LinearGradient>
   );

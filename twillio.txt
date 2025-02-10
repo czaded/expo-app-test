@@ -1,0 +1,4 @@
+ curl -X POST http://tracking.digital-apps.de:3000/send-sms -H "Content-Type: application/json" -d '{
+    "to": "+4915208732650",
+    "message": "Hallo, dies ist eine Testnachricht!"
+}'

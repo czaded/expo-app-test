@@ -36,7 +36,6 @@ const useLocation = () => {
     };
   }, []);
   
-
   return { location };
 };
 
